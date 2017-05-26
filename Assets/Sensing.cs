@@ -4,19 +4,19 @@ using UnityEngine;
 using System;
 using Functional;
 using RayNav;
-public class Agent : MonoBehaviour {
+public class Sensing : MonoBehaviour {
 
 	private Rigidbody rb;
-	private GameObject childObj;
+	private GameObject agentObj;
 	// Use this for initialization
 	private const float Infinity = 1/0f;
 	private const float feelerLength = 3;
 	private const float avoidanceStrength = 0.5f;
 	private Feeler[] feelers = {
-		new Feeler("top", Normalize(new Vector3(0, 1, 1))),
+		// new Feeler("top", Normalize(new Vector3(0, 1, 1))),
 		// new Feeler("bottom", Normalize(new Vector3(0, -1, 1))),
-		new Feeler("right", Normalize(new Vector3(1, 0, 1))),
-		new Feeler("left", Normalize(new Vector3(-1, 0, 1))),
+		// new Feeler("right", Normalize(new Vector3(1, 0, 1))),
+		// new Feeler("left", Normalize(new Vector3(-1, 0, 1))),
 		new Feeler("forward", Vector3.forward)
 	};
 	private bool[] hitting;
@@ -27,8 +27,9 @@ public class Agent : MonoBehaviour {
 		feelerDirs = F.Map(Feeler.getDirection, feelers);
 		//feelerNames = F.Map(Feeler.getName, feelers);
 
-		childObj = gameObject.transform.GetChild(0).gameObject;
-		rb = childObj.GetComponent(typeof(Rigidbody)) as Rigidbody;
+		agentObj = gameObject;
+		// agentObj = gameObject.transform.GetChild(0).gameObject;
+		rb = agentObj.GetComponent(typeof(Rigidbody)) as Rigidbody;
 		// rb.velocity = new Vector3(
 		// 	UnityEngine.Random.Range(-1, 1),
 		// 	0,
@@ -74,7 +75,7 @@ public class Agent : MonoBehaviour {
 	}
 
 	Vector3? ComputeAvoidanceVector () {
-		Vector3?[] castResults = F.Map(feelerDir => cast(childObj, feelerDir), feelerDirs); 
+		Vector3?[] castResults = F.Map(feelerDir => cast(agentObj, feelerDir), feelerDirs); 
 		hitting = F.Map(result => result.HasValue, castResults);
 
 		Vector3[] filtered = F.FilterOutNulls(castResults);
@@ -87,9 +88,10 @@ public class Agent : MonoBehaviour {
 			//Vector3 exp = ExponentialSimple(averageDefault);
 
 			Vector3 invert = -averageDefault;
-			Vector3 localVelocity = childObj.transform.InverseTransformDirection(rb.velocity);
+			Vector3 localVelocity = agentObj.transform.InverseTransformDirection(rb.velocity);
 			print(localVelocity);
-			Vector3 steered = Quaternion.AngleAxis(90, Vector3.up) * invert;
+			// Vector3 steered = Quaternion.AngleAxis(90, Vector3.up) * invert;
+			Vector3 steered = Quaternion.AngleAxis(90, Vector3.right + Vector3.up) * invert;
 
 			// Vector3 outVector = steered * avoidanceStrength;
 			Vector3 outVector = steered;
@@ -123,16 +125,16 @@ public class Agent : MonoBehaviour {
 
 		//outVector = outVector * 2;
 		// print(rb.velocity);
-		// drawAgentVector(childObj.transform.TransformDirection(rb.velocity), () => Color.magenta);
+		// drawAgentVector(agentObj.transform.TransformDirection(rb.velocity), () => Color.magenta);
 		Vector3 torque = expOutVector * 0.1f;
-		rb.AddRelativeTorque(new Vector3(-torque.y, torque.x, -torque.z));
+		rb.AddRelativeTorque(new Vector3(-torque.y, torque.x, torque.z));
 		rb.AddRelativeForce(Vector3.forward * outVector.magnitude);
 
 		//max velocity
 		//rb.velocity = Vector3.ClampMagnitude(rb.velocity, 2f);
 
 		// Vector3[] responses = F.Map((feelerDir) => {
-		// 	Vector3? castResult = cast(childObj, feelerDir);
+		// 	Vector3? castResult = cast(agentObj, feelerDir);
 		// 	return -exponential(castResult) * 10;
 		// }, feelerDirs);
 
@@ -146,7 +148,7 @@ public class Agent : MonoBehaviour {
 		// 	rb.AddForce(summed * 0.1f);
 		// }
 		// else {
-		// 	rb.AddForce(childObj.transform.TransformDirection(Vector3.forward));
+		// 	rb.AddForce(agentObj.transform.TransformDirection(Vector3.forward));
 		// }
 
 		// if (right.HasValue) { rb.AddForce(new Vector3(-1, 0, -1) * right.Value); }
@@ -182,8 +184,8 @@ public class Agent : MonoBehaviour {
 	}
 
 	void drawAgentVector (Vector3 vec, Func<Color> colorFn) {
-			Vector3 pos = childObj.transform.TransformPoint(Vector3.zero);
-			Vector3 dir = childObj.transform.TransformDirection(vec);
+			Vector3 pos = agentObj.transform.TransformPoint(Vector3.zero);
+			Vector3 dir = agentObj.transform.TransformDirection(vec);
 			Debug.DrawLine(pos, pos + dir * feelerLength, colorFn());
 	}
 
