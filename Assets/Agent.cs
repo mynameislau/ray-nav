@@ -10,11 +10,11 @@ public class Agent : MonoBehaviour {
 	private GameObject childObj;
 	// Use this for initialization
 	private const float Infinity = 1/0f;
-	private const float feelerLength = 2;
+	private const float feelerLength = 3;
 	private const float avoidanceStrength = 0.5f;
 	private Feeler[] feelers = {
 		new Feeler("top", Normalize(new Vector3(0, 1, 1))),
-		new Feeler("bottom", Normalize(new Vector3(0, -1, 1))),
+		// new Feeler("bottom", Normalize(new Vector3(0, -1, 1))),
 		new Feeler("right", Normalize(new Vector3(1, 0, 1))),
 		new Feeler("left", Normalize(new Vector3(-1, 0, 1))),
 		new Feeler("forward", Vector3.forward)
@@ -29,11 +29,11 @@ public class Agent : MonoBehaviour {
 
 		childObj = gameObject.transform.GetChild(0).gameObject;
 		rb = childObj.GetComponent(typeof(Rigidbody)) as Rigidbody;
-		rb.velocity = new Vector3(
-			UnityEngine.Random.Range(-1, 1),
-			0,
-			UnityEngine.Random.Range(-1, 1)
-		);
+		// rb.velocity = new Vector3(
+		// 	UnityEngine.Random.Range(-1, 1),
+		// 	0,
+		// 	UnityEngine.Random.Range(-1, 1)
+		// );
 	}
 
 	static Vector3 Normalize (Vector3 vec) {
@@ -55,7 +55,7 @@ public class Agent : MonoBehaviour {
 			return valA.HasValue;
 		}
 	}
-	Vector3 LimitedSteer (Vector3 source, Vector3 target, float steer = (float) Math.PI * 0.8f) {
+	Vector3 LimitedSteer (Vector3 source, Vector3 target, float steer = (float) Math.PI * 0.5f) {
 		float magnitude = target.magnitude;
 		Vector3 rotated = Vector3.RotateTowards(Normalize(source), Normalize(target), steer, 1f);
 		return rotated * magnitude;
@@ -70,7 +70,7 @@ public class Agent : MonoBehaviour {
 	Vector3 ExponentialSimple (Vector3 vec) {
 		float magnitude = vec.magnitude;
 		Vector3 normalized = Vector3.Normalize(vec);
-		return normalized * (1 - Mathf.Pow(magnitude, 5));
+		return normalized * (1 - magnitude);
 	}
 
 	Vector3? ComputeAvoidanceVector () {
@@ -84,18 +84,19 @@ public class Agent : MonoBehaviour {
 			Vector3 averageDefault = average.HasValue ? average.Value : Vector3.zero;
 			//Vector3 normalized = Normalize(summed);
 
-			Vector3 exp = ExponentialSimple(averageDefault);
+			//Vector3 exp = ExponentialSimple(averageDefault);
 
-			Vector3 invert = -exp;
+			Vector3 invert = -averageDefault;
+			Vector3 localVelocity = childObj.transform.InverseTransformDirection(rb.velocity);
+			print(localVelocity);
+			Vector3 steered = Quaternion.AngleAxis(90, Vector3.up) * invert;
 
-			Vector3 steered = LimitedSteer(rb.velocity, invert);
-
-			Vector3 outVector = steered * avoidanceStrength;
+			// Vector3 outVector = steered * avoidanceStrength;
+			Vector3 outVector = steered;
 
 			//debug stuff
-			print(exp);
-			drawAgentVector(invert, () => Color.yellow);
-		  drawAgentVector(outVector, () => Color.green);
+			drawAgentVector(steered, () => Color.yellow);
+		  drawAgentVector(invert, () => Color.green);
 			//end debug
 
 			return outVector;
@@ -109,6 +110,7 @@ public class Agent : MonoBehaviour {
 
 		Vector3? avoidanceVec = ComputeAvoidanceVector();
 		Vector3 outVector;
+		Vector3 expOutVector;
 
 		//outVector = -outVector;
 		if (avoidanceVec.HasValue) {
@@ -117,14 +119,17 @@ public class Agent : MonoBehaviour {
 		else {
 			outVector = Vector3.forward;
 		}
+		expOutVector = ExponentialSimple(outVector);
 
 		//outVector = outVector * 2;
-
-		drawAgentVector(rb.velocity, () => Color.magenta);
-		rb.AddForce(outVector);
+		// print(rb.velocity);
+		// drawAgentVector(childObj.transform.TransformDirection(rb.velocity), () => Color.magenta);
+		Vector3 torque = expOutVector * 0.1f;
+		rb.AddRelativeTorque(new Vector3(-torque.y, torque.x, -torque.z));
+		rb.AddRelativeForce(Vector3.forward * outVector.magnitude);
 
 		//max velocity
-		rb.velocity = Vector3.ClampMagnitude(rb.velocity, 2f);
+		//rb.velocity = Vector3.ClampMagnitude(rb.velocity, 2f);
 
 		// Vector3[] responses = F.Map((feelerDir) => {
 		// 	Vector3? castResult = cast(childObj, feelerDir);
