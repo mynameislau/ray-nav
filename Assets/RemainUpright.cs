@@ -15,6 +15,6 @@ public class RemainUpright : MonoBehaviour {
 	// Update is called once per frame
 	void FixedUpdate () {
 		var rot = Quaternion.FromToRotation(transform.up, Vector3.up);
-		rb.AddTorque(new Vector3(rot.x, rot.y, rot.z)*100);
+		rb.AddTorque(new Vector3(rot.x, rot.y, rot.z)*0.1f);
 	}
 }

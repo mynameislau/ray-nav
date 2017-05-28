@@ -11,12 +11,12 @@ public class Sensing : MonoBehaviour {
 	// Use this for initialization
 	private const float Infinity = 1/0f;
 	private const float feelerLength = 3;
-	private const float avoidanceStrength = 0.5f;
+	private const float avoidanceStrength = 0.1f;
 	private Feeler[] feelers = {
-		// new Feeler("top", Normalize(new Vector3(0, 1, 1))),
-		// new Feeler("bottom", Normalize(new Vector3(0, -1, 1))),
-		// new Feeler("right", Normalize(new Vector3(1, 0, 1))),
-		// new Feeler("left", Normalize(new Vector3(-1, 0, 1))),
+		new Feeler("top", Normalize(new Vector3(0, 1, 1))),
+		new Feeler("bottom", Normalize(new Vector3(0, -1, 1))),
+		new Feeler("right", Normalize(new Vector3(1, 0, 1))),
+		new Feeler("left", Normalize(new Vector3(-1, 0, 1))),
 		new Feeler("forward", Vector3.forward)
 	};
 	private bool[] hitting;
@@ -74,61 +74,98 @@ public class Sensing : MonoBehaviour {
 		return normalized * (1 - magnitude);
 	}
 
-	Vector3? ComputeAvoidanceVector () {
-		Vector3?[] castResults = F.Map(feelerDir => cast(agentObj, feelerDir), feelerDirs); 
+	struct AvoidanceData {
+		public Vector3 reflection;
+
+	}
+
+	AvoidanceData? ComputeAvoidanceVector () {
+		FeelerData?[] castResults = F.Map(feelerDir => cast(agentObj, feelerDir), feelerDirs); 
 		hitting = F.Map(result => result.HasValue, castResults);
 
-		Vector3[] filtered = F.FilterOutNulls(castResults);
+		FeelerData[] filtered = F.FilterOutNulls(castResults);
 
 		if (filtered.Length > 0) {
-			Vector3? average = Average(filtered);
+			Vector3? averageReflection = Average(F.Map(current => current.reflection, filtered));
+			Vector3 averageReflectionDefault = averageReflection.HasValue ? averageReflection.Value : Vector3.zero;
+			Vector3? average = Average(F.Map(current => current.hitData, filtered));
 			Vector3 averageDefault = average.HasValue ? average.Value : Vector3.zero;
+			
 			//Vector3 normalized = Normalize(summed);
 
 			//Vector3 exp = ExponentialSimple(averageDefault);
 
-			Vector3 invert = -averageDefault;
-			Vector3 localVelocity = agentObj.transform.InverseTransformDirection(rb.velocity);
-			print(localVelocity);
+			//Vector3 invert = -averageDefault;
+			//Vector3 localVelocity = agentObj.transform.InverseTransformDirection(rb.velocity);
 			// Vector3 steered = Quaternion.AngleAxis(90, Vector3.up) * invert;
-			Vector3 steered = Quaternion.AngleAxis(90, Vector3.right + Vector3.up) * invert;
+			//Vector3 steered = Quaternion.AngleAxis(90, Vector3.right + Vector3.up) * invert;
+			//Vector3 steered = LimitedSteer(-invert, invert);
+
 
 			// Vector3 outVector = steered * avoidanceStrength;
-			Vector3 outVector = steered;
+			Vector3 outVector = averageDefault;
 
-			//debug stuff
-			drawAgentVector(steered, () => Color.yellow);
-		  drawAgentVector(invert, () => Color.green);
 			//end debug
-
-			return outVector;
+			AvoidanceData data;
+			data.reflection = averageReflectionDefault;
+			return data;
 		}
 		else {
 			return null;
 		}
 	}
 
+	Vector3 GetAngleTruc (Vector3 eulerAngle) {
+		Vector3 bla = eulerAngle / 360;
+		return new Vector3(
+			bla.x > 0.5 ? -(1 - bla.x) : bla.x,
+			bla.y > 0.5 ? -(1 - bla.y) : bla.y,
+			bla.z > 0.5 ? -(1 - bla.z) : bla.z
+		);
+	}
+
 	void FixedUpdate () {
 
-		Vector3? avoidanceVec = ComputeAvoidanceVector();
+		AvoidanceData? avoidanceVec = ComputeAvoidanceVector();
 		Vector3 outVector;
 		Vector3 expOutVector;
-
+		Vector3 torque;
 		//outVector = -outVector;
 		if (avoidanceVec.HasValue) {
-			outVector = avoidanceVec.Value;
+			outVector = avoidanceVec.Value.reflection;
+			// torque = (Vector3.forward - outVector) * 0.3f;
+			expOutVector = ExponentialSimple(outVector);
+			// print(torque.x);
+			// Quaternion diff = Quaternion.Slerp(Quaternion.LookRotation(Vector3.forward), Quaternion.LookRotation(outVector), 0.1f);
+			// Vector3 euler = diff.eulerAngles;
+			// euler = euler * 0.0001f;
+			// rb.AddRelativeTorque(Vector3.Cross(outVector, Vector3.up) * 0.01f);
+			Quaternion rot = Quaternion.FromToRotation(Vector3.forward, outVector);
+			Vector3 truc = GetAngleTruc(rot.eulerAngles);
+			print(rot.eulerAngles);
+			truc.z = 0;
+			rb.AddRelativeTorque(truc * avoidanceStrength);
+
+			//debug stuff
+			drawAgentVector(rot * Vector3.forward * 10f, () => Color.yellow);
+		  // drawAgentVector(Normalize(euler) * 10f, () => Color.green);
 		}
 		else {
 			outVector = Vector3.forward;
+			float zRotation = rb.rotation.eulerAngles.z;
+			zRotation = zRotation / 360;
+			zRotation = zRotation > 0.5 ? -(1 - zRotation) : zRotation;
+			print(zRotation);
+			rb.AddRelativeTorque(new Vector3(0, 0, -zRotation * 0.1f));
 		}
-		expOutVector = ExponentialSimple(outVector);
-
+		
+		rb.AddRelativeForce(Vector3.forward * outVector.magnitude);
 		//outVector = outVector * 2;
 		// print(rb.velocity);
 		// drawAgentVector(agentObj.transform.TransformDirection(rb.velocity), () => Color.magenta);
-		Vector3 torque = expOutVector * 0.1f;
-		rb.AddRelativeTorque(new Vector3(-torque.y, torque.x, torque.z));
-		rb.AddRelativeForce(Vector3.forward * outVector.magnitude);
+		//Vector3 torque = expOutVector * rb.velocity.magnitude * 0.1f;
+		//print(expOutVector + " torque : " + expOutVector.y + " " + (expOutVector.y * rb.velocity.magnitude * 0.1f));
+		//rb.AddRelativeTorque(new Vector3(-expOutVector.y, -expOutVector.x, 0));
 
 		//max velocity
 		//rb.velocity = Vector3.ClampMagnitude(rb.velocity, 2f);
@@ -160,23 +197,31 @@ public class Sensing : MonoBehaviour {
 		//\frac{\cos \left(x\pi \right)}{2}+\ 0.5
 		float linear = vec.magnitude;
 		double exp = Mathf.Cos(linear * Mathf.PI) / 2 + 0.5;
-		print("exp :" + exp + " linear : " + linear);
 		return vec * ((float)exp);
 	}
 
-	Vector3 feelerData (Vector3 vec) {
+	FeelerData feelerData (Vector3 vec, Vector3 normal) {
 		float linear = vec.magnitude / feelerLength;
 		Vector3 norm = Normalize(vec);
-		return norm * linear;
+		FeelerData data;
+		data.hitData = norm * linear;
+		data.reflection = Vector3.Reflect(data.hitData, normal);
+		return data;
 	}
 
-	Vector3? cast(GameObject gameObj, Vector3 localDir) {
+	struct FeelerData
+	{
+		public Vector3 hitData;
+		public Vector3 reflection;
+	}
+
+	FeelerData? cast(GameObject gameObj, Vector3 localDir) {
 		Vector3 pos = gameObj.transform.TransformPoint(Vector3.zero);
 		Vector3 dir = gameObj.transform.TransformDirection(localDir);
 		RaycastHit rh = new RaycastHit();
 		if (Physics.Raycast(pos, dir, out rh, feelerLength)) {
 			Vector3 local =  gameObj.transform.InverseTransformDirection(rh.point - pos);
-			return feelerData(local);
+			return feelerData(local, gameObj.transform.InverseTransformDirection(rh.normal));
 		}
 		else {
 			return null;
@@ -186,12 +231,12 @@ public class Sensing : MonoBehaviour {
 	void drawAgentVector (Vector3 vec, Func<Color> colorFn) {
 			Vector3 pos = agentObj.transform.TransformPoint(Vector3.zero);
 			Vector3 dir = agentObj.transform.TransformDirection(vec);
-			Debug.DrawLine(pos, pos + dir * feelerLength, colorFn());
+			Debug.DrawLine(pos, pos + dir, colorFn());
 	}
 
 	void debugFeelers () {
 		F.ForEach((feelerDir, index) => {
-			drawAgentVector(feelerDir, () => hitting[index] ? Color.red : Color.grey);
+			drawAgentVector(feelerDir * feelerLength, () => hitting[index] ? Color.red : Color.grey);
 		}, feelerDirs);
 	}
 }
